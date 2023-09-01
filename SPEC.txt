@@ -1,53 +1,32 @@
 --- Variable Declaration ---
-[a] is [b]
+[variable] is [value]
 
-hello is 3
-kachow is "damn"
-hai is false
+--- Primitives ---
+true
+false
+null
+object
 
---- Function Declaration ---
-section [name]
-return
-
-section goos
-print "kachow"
-return
+--- Reference Points ---
+chapter [name]
+jump to [name]
+jump last
+jump back
 
 --- Condition ---
-is equal
-is unequal to
+is equal to
+is not equal to
 is less than
 is greater than
 
-if 3 is equal to 5 then print "yes, only one line allowed, therefore no end tag required"
-
 --- Property ---
-'s
+'s -- statically get property
+get [object] [key (string / number)] -- dynamically get property
+set [object] [key (string / number)] [value] -- dynamically set property
 
-goos is new object
-goos's age is 16
-goos's name is "hot chocolate"
+--- If ---
+if [value] [condition] [value] then [expression]
+otherwise [expression]
 
-squad is new array
-squad's 0 is goos
-
---- Blocks ---
-if (expression) then (expression)
-otherwise if (expression) then (expression)
-otherwise (expression)
-
-if 3 + 5 is equal to 8 then print "u can math"
-otherwise if 9 + 10 is equal to 21 then print "imagine"
-otherwise if false then print "hACKeRRR!1!!!!11"
-otherwise crash "breh"
-
---- Function Execution ---
-(section) (a) (b) (c) (...)
-
-print "hai"
-
---- Other Keywords ---
-crash (error message)
-exit
-get (object / array) (dynamic value)
-set (object / array) (dynamic value) (target value)
+--- Other ---
+jump to epilogue -- exit
