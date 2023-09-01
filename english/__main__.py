@@ -5,10 +5,10 @@
 import sys
 import shlex
 from pathlib import Path
-from typing import List, Union
+from typing import Any, List
 
 # Initialization
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 
 sys.argv = sys.argv[1:]
 if not sys.argv:
@@ -30,7 +30,11 @@ with open(filepath, "r") as fh:
     lines = fh.read().splitlines()
 
 # Handle parsing
-def parse_object(object: str) -> Union[bool, str, int, float]:
+def parse_object(object: str) -> Any:
+    data = object.split(" ")
+    if data[0] == "new":
+        return {"object": dict, "array": list}[data[1]]()
+
     bool_obj = {"true": True, "false": False}.get(object)
     if bool_obj is not None:
         return bool_obj
@@ -60,7 +64,7 @@ for line_number, line in enumerate(lines):
     chapters[data[1]] = line_number + 1
 
 # Perform mainloop
-current_line, variables, jumped_prologue, stack = 0, {}, False, []
+current_line, variables, jumped_prologue, stack = 0, {"goos": {}}, False, []
 while current_line < len(lines):
     line, content = lines[current_line], shlex.split(lines[current_line], posix = False)
 
@@ -99,6 +103,20 @@ while current_line < len(lines):
 
         continue
 
+    # Handle variable assignment
+    if "is" in content:
+        is_index, current = content.index("is"), variables
+        if is_index > 1:
+            try:
+                for key in content[:(is_index - 1)]:
+                    current = current[key.removesuffix("'s")]
+
+            except KeyError:
+                exit("english: grammatical ownership problem")
+
+        current[content[is_index - 1]] = parse_object(" ".join(content[is_index + 1:]))
+
     # Debug info! Wooo!!
     print(f"Line: {current_line} | Content: {line} ({content})")
+    print(variables)
     current_line += 1
