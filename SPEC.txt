@@ -21,8 +21,8 @@ is greater than
 
 --- Property ---
 's -- statically get property
-get [object] [key (string / number)] -- dynamically get property
-set [object] [key (string / number)] [value] -- dynamically set property
+get [key (string / number)] from [object] as [variable] -- dynamically get property
+set [key (string / number)] of [object] to [variable/value] -- dynamically set property
 
 --- If ---
 if [value] [condition] [value] then [expression]
