@@ -11,9 +11,10 @@ from .builtins import (
     builtins,
     Raw, Spacer, Converted
 )
+from .if_parser import parse_if_data, run_if_comp
 
 # Initialization
-__version__ = "0.0.7"
+__version__ = "0.0.8"
 
 sys.argv = sys.argv[1:]
 if not sys.argv:
@@ -52,6 +53,8 @@ for line_number, line in enumerate(lines):
 
     chapters[data[1]] = line_number + 1
 
+del line_number, line  # Get line number/line out of RAM
+
 # Mainloop init
 current_line, variables, jumped_prologue, stack = 0, {}, False, []
 evaluator = SimpleEval()
@@ -89,16 +92,23 @@ def builtin_print(*args) -> None:
     print(*args)
 
 # Perform mainloop
+last_if = None
 while current_line < len(lines):
     line, content = lines[current_line], shlex.split(lines[current_line], posix = False)
-    # print(f"Line: {current_line + 1} | Content: {line} ({content})")
+
+    # Clear the last if stack
+    if content[0] not in ["if", "otherwise"]:
+        last_if = None
 
     # Handle immediate built-ins
-    if content[0] in builtins.builtins:
-        builtins.builtins[content[0]](
+    def run_builtin(line_data: List[str]) -> None:
+        builtins.builtins[line_data[0]](
             *[(parse_object(c), c)
-            for c in content[1:]]
+            for c in line_data[1:]]
         )
+
+    if content[0] in builtins.builtins:
+        run_builtin(content)
         current_line += 1
         continue
 
@@ -136,6 +146,31 @@ while current_line < len(lines):
 
                 case _:
                     exit("english: are you high?")
+
+        case "if" | "otherwise":
+            if content[0] == "otherwise":
+                if last_if is None:
+                    exit("english: cannot use otherwise by itself.")
+
+                elif last_if is True:
+                    current_line += 1
+                    continue
+
+                elif content[1] != "if":
+                    run_builtin(content[1:])
+                    current_line += 1
+                    continue
+
+                # Remove the otherwise and treat it like a regular if statement
+                content = content[1:]
+
+            v1, v2, cond, expr = parse_if_data(content[1:])
+            last_if = run_if_comp(parse_object(v1), parse_object(v2), cond)
+            if last_if:
+                run_builtin(shlex.split(expr, posix = False))
+
+            current_line += 1
+            continue
 
     # Handle variable assignment
     if "is" in content:
