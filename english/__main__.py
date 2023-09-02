@@ -4,12 +4,16 @@
 import sys
 import shlex
 from pathlib import Path
-from typing import Any, List, Union
+from typing import Any, List
 
 from .simple_eval import SimpleEval
+from .builtins import (
+    builtins,
+    Raw, Spacer, Converted
+)
 
 # Initialization
-__version__ = "0.0.6"
+__version__ = "0.0.7"
 
 sys.argv = sys.argv[1:]
 if not sys.argv:
@@ -57,10 +61,15 @@ def parse_object(object: str) -> Any:
     if chunks[0] == "new":
         return {"object": dict, "array": list}[chunks[1]]()
 
-    return evaluator.eval(object, names = variables)
+    try:
+        return evaluator.eval(object, names = variables)
+
+    except Exception:
+        return None
 
 # Chapter builtins
-def builtin_set(object: str, key: Union[str, int], value: Any) -> None:
+@builtins.builtin([Converted, Spacer("of"), Converted, Spacer("to"), Converted])
+def builtin_set(key: str | int, object: dict | list, value: Any) -> None:
     if isinstance(object, list):
         if isinstance(key, str):
             return exit("english: an array does not have indexed keys.")
@@ -71,17 +80,29 @@ def builtin_set(object: str, key: Union[str, int], value: Any) -> None:
 
     object[key] = value
 
-builtin_chapters = {
-    "print": lambda *a: print(*a),
-    "set": builtin_set
-}
+@builtins.builtin([Converted, Spacer("from"), Converted, Spacer("as"), Raw])
+def builtin_get(key: str | int, object: dict | list, variable: str) -> None:
+    variables[variable] = object[key]
+
+@builtins.builtin([])
+def builtin_print(*args) -> None:
+    print(*args)
 
 # Perform mainloop
 while current_line < len(lines):
     line, content = lines[current_line], shlex.split(lines[current_line], posix = False)
-    print(f"Line: {current_line + 1} | Content: {line} ({content})")
+    # print(f"Line: {current_line + 1} | Content: {line} ({content})")
 
-    # Match most built-in chapters
+    # Handle immediate built-ins
+    if content[0] in builtins.builtins:
+        builtins.builtins[content[0]](
+            *[(parse_object(c), c)
+            for c in content[1:]]
+        )
+        current_line += 1
+        continue
+
+    # Match more integrated chapters
     match content[0]:
         case "chapter":
             if not jumped_prologue:
@@ -128,12 +149,5 @@ while current_line < len(lines):
                 exit("english: grammatical ownership problem")
 
         current[content[is_index - 1]] = parse_object(" ".join(content[is_index + 1:]))
-
-    # Handle the rest of the built-ins
-    if content[0] in builtin_chapters:
-        builtin_chapters[content[0]](
-            *[parse_object(c)
-            for c in content[1:]]
-        )
 
     current_line += 1
