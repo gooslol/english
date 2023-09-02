@@ -164,10 +164,17 @@ while current_line < len(lines):
                 # Remove the otherwise and treat it like a regular if statement
                 content = content[1:]
 
-            v1, v2, cond, expr = parse_if_data(content[1:])
-            last_if = run_if_comp(parse_object(v1), parse_object(v2), cond)
-            if last_if:
-                run_builtin(shlex.split(expr, posix = False))
+            try:
+                v1, v2, cond, expr = parse_if_data(content[1:])
+                last_if = run_if_comp(parse_object(v1), parse_object(v2), cond)
+                if last_if:
+                    run_builtin(shlex.split(expr, posix = False))
+
+            except IndexError:
+                exit("english: invalid if statement")
+
+            except TypeError:
+                exit("english: statement is comparing uncomparable types")
 
             current_line += 1
             continue
