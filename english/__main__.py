@@ -6,16 +6,16 @@ import shlex
 from pathlib import Path
 from typing import Any, List
 
+from . import __version__
 from .simple_eval import SimpleEval
 from .builtins import (
     builtins,
     Raw, Spacer, Converted
 )
 from .if_parser import parse_if_data, run_if_comp
+from .exceptions import show_exception
 
 # Initialization
-__version__ = "0.0.8"
-
 sys.argv = sys.argv[1:]
 if not sys.argv:
     exit("\n".join([line.split(" ~ ")[1] for line in f"""
@@ -56,140 +56,160 @@ for line_number, line in enumerate(lines):
 del line_number, line  # Get line number/line out of RAM
 
 # Mainloop init
-current_line, variables, jumped_prologue, stack = 0, {}, False, []
-evaluator = SimpleEval()
+class EnglishInterpreter(object):
+    def __init__(self) -> None:
+        self.current_line = 0
+        self.variables = {}
+        self.has_jumped_prologue = False
+        self.stack = []
+        self.evaluator = SimpleEval()
 
-def parse_object(object: str) -> Any:
-    chunks = object.split(" ")
-    if chunks[0] == "new":
-        return {"object": dict, "array": list}[chunks[1]]()
+    def parse_object(self, object: str) -> Any:
+        chunks = object.split(" ")
+        if chunks[0] == "new":
+            return {"object": dict, "array": list}[chunks[1]]()
 
-    try:
-        return evaluator.eval(object, names = variables)
+        try:
+            return self.evaluator.eval(object, names = self.variables)
 
-    except Exception:
-        return None
+        except Exception:
+            return None
 
-# Chapter builtins
-@builtins.builtin([Converted, Spacer("of"), Converted, Spacer("to"), Converted])
-def builtin_set(key: str | int, object: dict | list, value: Any) -> None:
-    if isinstance(object, list):
-        if isinstance(key, str):
-            return exit("english: an array does not have indexed keys.")
+    # Chapter builtins
+    @builtins.builtin([Converted, Spacer("of"), Converted, Spacer("to"), Converted])
+    def builtin_set(self, key: str | int, object: dict | list, value: Any) -> None:
+        if isinstance(object, list):
+            if isinstance(key, str):
+                raise IndexError("arrays do not support object-like keys.")
 
-        # Ensure this list is padded enough for you to
-        # index with whatever key we were given
-        object += [None] * ((key or 1) - len(object))
+            # Ensure this list is padded enough for you to
+            # index with whatever key we were given
+            object += [None] * ((key or 1) - len(object))
 
-    object[key] = value
+        object[key] = value
 
-@builtins.builtin([Converted, Spacer("from"), Converted, Spacer("as"), Raw])
-def builtin_get(key: str | int, object: dict | list, variable: str) -> None:
-    variables[variable] = object[key]
+    @builtins.builtin([Converted, Spacer("from"), Converted, Spacer("as"), Raw])
+    def builtin_get(self, key: str | int, object: dict | list, variable: str) -> None:
+        self.variables[variable] = object[key]
 
-@builtins.builtin([])
-def builtin_print(*args) -> None:
-    print(*args)
+    @builtins.builtin([])
+    def builtin_print(*args) -> None:
+        print(*args)
 
-# Perform mainloop
-last_if = None
-while current_line < len(lines):
-    line, content = lines[current_line], shlex.split(lines[current_line], posix = False)
-
-    # Clear the last if stack
-    if content[0] not in ["if", "otherwise"]:
+    def mainloop(self) -> None:
         last_if = None
+        while self.current_line < len(lines):
+            content = shlex.split(lines[self.current_line], posix = False)
+            if content[0] not in ["if", "otherwise"]:
+                last_if = None  # Reset the last if statement's value
 
-    # Handle immediate built-ins
-    def run_builtin(line_data: List[str]) -> None:
-        builtins.builtins[line_data[0]](
-            *[(parse_object(c), c)
-            for c in line_data[1:]]
-        )
+            # Handle immediate built-ins
+            def run_builtin(line_data: List[str]) -> None:
+                builtins.builtins[line_data[0]](
+                    *[(self.parse_object(c), c)
+                    for c in line_data[1:]]
+                )
 
-    if content[0] in builtins.builtins:
-        run_builtin(content)
-        current_line += 1
-        continue
-
-    # Match more integrated chapters
-    match content[0]:
-        case "chapter":
-            if not jumped_prologue:
-                current_line = chapters.get("prologue")
-                if current_line is None:
-                    exit(0)  # Graceful exit! Kachow!
-
-                jumped_prologue = True
+            if content[0] in builtins.builtins:
+                run_builtin(content)
+                self.current_line += 1
                 continue
 
-        case "jump":
-            match content[1]:
-                case "back":
-                    last_stack = stack.pop()
-                    if last_stack[1] == "epilogue":
-                        exit()
+            # Match more integrated chapters
+            match content[0]:
+                case "chapter":
+                    if not self.has_jumped_prologue:
+                        self.current_line = chapters.get("prologue")
+                        if self.current_line is None:
+                            exit(0)  # Graceful exit! Kachow!
 
-                    current_line = last_stack[0]
+                        self.has_jumped_prologue = True
+                        continue
 
-                case "last":
-                    current_line = chapters[stack[-1][1]]
-                
-                case "to":
-                    stack.append((current_line + 1, content[2]))
-                    current_line = chapters.get(content[2])
-                    if current_line is None:
-                        exit(
-                            "english: cannot jump into the backrooms."
-                            if content[2] != "epilogue" else 0
+                case "jump":
+                    match content[1]:
+                        case "back":
+                            last_stack = self.stack.pop()
+                            if last_stack[1] == "epilogue":
+                                exit(0)
+
+                            self.current_line = last_stack[0]
+
+                        case "last":
+                            self.current_line = chapters[self.stack[-1][1]]
+                        
+                        case "to":
+                            self.stack.append((self.current_line + 1, content[2]))
+                            self.current_line = chapters.get(content[2])
+                            if self.current_line is None:
+                                if content[2] == "epilogue":
+                                    exit(0)
+
+                                raise ValueError(
+                                    "cannot jump to a non-existant chapter.")
+
+                        case _:
+                            raise ValueError("you're trying to jump *where*?")
+
+                case "if" | "otherwise":
+                    if content[0] == "otherwise":
+                        if last_if is None:
+                            raise ValueError(
+                                "otherwise must be used in conjunction with if.")
+
+                        elif last_if is True:
+                            self.current_line += 1
+                            continue
+
+                        elif content[1] != "if":
+                            run_builtin(content[1:])
+                            self.current_line += 1
+                            continue
+
+                        # Remove the otherwise and treat it like a regular if statement
+                        content = content[1:]
+
+                    try:
+                        v1, v2, cond, expr = parse_if_data(content[1:])
+                        last_if = run_if_comp(
+                            self.parse_object(v1),
+                            self.parse_object(v2),
+                            cond
+                        )
+                        if last_if:
+                            run_builtin(shlex.split(expr, posix = False))
+
+                    except Exception as e:
+                        raise TypeError(
+                            "provided statement is unparsable."
+                            if isinstance(e, IndexError) else
+                            "statement is comparing uncomparable types."
                         )
 
-                case _:
-                    exit("english: are you high?")
-
-        case "if" | "otherwise":
-            if content[0] == "otherwise":
-                if last_if is None:
-                    exit("english: cannot use otherwise by itself.")
-
-                elif last_if is True:
-                    current_line += 1
+                    self.current_line += 1
                     continue
 
-                elif content[1] != "if":
-                    run_builtin(content[1:])
-                    current_line += 1
-                    continue
+            # Handle variable assignment
+            if "is" in content:
+                is_index, current = content.index("is"), self.variables
+                if is_index > 1:
+                    try:
+                        for key in content[:(is_index - 1)]:
+                            current = current[key.removesuffix("'s")]
 
-                # Remove the otherwise and treat it like a regular if statement
-                content = content[1:]
+                    except KeyError:
+                        raise ValueError("provided item is missing ownership.")
 
-            try:
-                v1, v2, cond, expr = parse_if_data(content[1:])
-                last_if = run_if_comp(parse_object(v1), parse_object(v2), cond)
-                if last_if:
-                    run_builtin(shlex.split(expr, posix = False))
+                current[content[is_index - 1]] = \
+                    self.parse_object(" ".join(content[is_index + 1:]))
 
-            except IndexError:
-                exit("english: invalid if statement")
+            self.current_line += 1
 
-            except TypeError:
-                exit("english: statement is comparing uncomparable types")
+# Handle CLI
+if __name__ == "__main__":
+    interpreter = EnglishInterpreter()
+    try:
+        interpreter.mainloop()
 
-            current_line += 1
-            continue
-
-    # Handle variable assignment
-    if "is" in content:
-        is_index, current = content.index("is"), variables
-        if is_index > 1:
-            try:
-                for key in content[:(is_index - 1)]:
-                    current = current[key.removesuffix("'s")]
-
-            except KeyError:
-                exit("english: grammatical ownership problem")
-
-        current[content[is_index - 1]] = parse_object(" ".join(content[is_index + 1:]))
-
-    current_line += 1
+    except Exception as e:
+        show_exception(e.args[0], interpreter.current_line, filepath)
