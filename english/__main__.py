@@ -6,8 +6,10 @@ import shlex
 from pathlib import Path
 from typing import Any, List, Union
 
+from .simple_eval import SimpleEval
+
 # Initialization
-__version__ = "0.0.5"
+__version__ = "0.0.6"
 
 sys.argv = sys.argv[1:]
 if not sys.argv:
@@ -29,24 +31,6 @@ with open(filepath, "r") as fh:
     lines = fh.read().splitlines()
 
 # Handle parsing
-def parse_object(object: str) -> Any:
-    chunks = object.split(" ")
-    handlers = {
-        "new": lambda: {"object": dict, "array": list}[chunks[1]](),
-        "null": lambda: None, "true": lambda: True, "false": lambda: False
-    }
-    if chunks[0] in handlers:
-        return handlers[chunks[0]]()
-
-    elif object[0].isdigit() or object[0] in "+-.":
-        object = float(object)
-        return object if not object.is_integer() else int(object)
-
-    elif (object[0] == "\"" and object[-1] == "\"") and (len(object) >= 2):
-        return object[1:][:-1]
-
-    return object
-
 def cleanup_lines(source: List[str]) -> List[str]:
     return [
         line.lstrip()
@@ -66,13 +50,17 @@ for line_number, line in enumerate(lines):
 
 # Mainloop init
 current_line, variables, jumped_prologue, stack = 0, {}, False, []
+evaluator = SimpleEval()
+
+def parse_object(object: str) -> Any:
+    chunks = object.split(" ")
+    if chunks[0] == "new":
+        return {"object": dict, "array": list}[chunks[1]]()
+
+    return evaluator.eval(object, names = variables)
 
 # Chapter builtins
 def builtin_set(object: str, key: Union[str, int], value: Any) -> None:
-    if object not in variables:
-        return exit("english: no such object exists.")
-
-    object = variables[object]
     if isinstance(object, list):
         if isinstance(key, str):
             return exit("english: an array does not have indexed keys.")
@@ -84,7 +72,7 @@ def builtin_set(object: str, key: Union[str, int], value: Any) -> None:
     object[key] = value
 
 builtin_chapters = {
-    "print": lambda *a: print(*[variables.get(_, _) for _ in a]),
+    "print": lambda *a: print(*a),
     "set": builtin_set
 }
 

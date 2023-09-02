@@ -77,20 +77,23 @@ def safe_add(a, b):
 class SimpleEval(object):
     expr = ""
 
-    def __init__(self, names = {}):
+    def __init__(self):
         self.operators = {
-            ast.Add: safe_add,
-            ast.Sub: op.sub,
-            ast.Mult: safe_mult,
-            ast.Div: op.truediv,
-            ast.FloorDiv: op.floordiv,
-            ast.Pow: safe_power
+            ast.Add: safe_add,          # Support a + b
+            ast.Sub: op.sub,            # Support a - b
+            ast.Mult: safe_mult,        # Support a * b
+            ast.Div: op.truediv,        # Support a / b
+            ast.FloorDiv: op.floordiv,  # Support a // b
+            ast.Pow: safe_power,        # Support a ** b
+            ast.UAdd: op.pos,           # Support +a
+            ast.USub: op.neg            # Support -a
         }
-        self.names = names
+        self.names = {}
         self.nodes = {
             ast.Expr: self._eval_expr,
             ast.Name: self._eval_name,
             ast.BinOp: self._eval_binop,
+            ast.UnaryOp: self._eval_unaryop,
             ast.Constant: self._eval_constant
         }
 
@@ -105,7 +108,8 @@ class SimpleEval(object):
 
         return parsed.body[0]
 
-    def eval(self, expr, previously_parsed=None):
+    def eval(self, expr, names={}, previously_parsed=None):
+        self.names = names
         self.expr = expr
         return self._eval(previously_parsed or self.parse(expr))
 
@@ -127,6 +131,13 @@ class SimpleEval(object):
                 " ({0}, when {1} is max)".format(len(node.value), MAX_STRING_LENGTH)
             )
         return node.value
+
+    def _eval_unaryop(self, node):
+        try:
+            operator = self.operators[type(node.op)]
+        except KeyError:
+            raise OperatorNotDefined(node.op, self.expr)
+        return operator(self._eval(node.operand))
 
     def _eval_binop(self, node):
         try:
