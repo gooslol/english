@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, List, Union
 
 # Initialization
-__version__ = "0.0.4"
+__version__ = "0.0.5"
 
 sys.argv = sys.argv[1:]
 if not sys.argv:
@@ -91,49 +91,42 @@ builtin_chapters = {
 # Perform mainloop
 while current_line < len(lines):
     line, content = lines[current_line], shlex.split(lines[current_line], posix = False)
-    print(f"Line: {current_line} | Content: {line} ({content})")
+    print(f"Line: {current_line + 1} | Content: {line} ({content})")
 
-    # If we hit a chapter, skip to prologue
-    # This ASSUMES that we already executed all topmost code
-    if content[0] == "chapter":
-        if jumped_prologue:
-            current_line += 1
-            continue
+    # Match most built-in chapters
+    match content[0]:
+        case "chapter":
+            if not jumped_prologue:
+                current_line = chapters.get("prologue")
+                if current_line is None:
+                    exit(0)  # Graceful exit! Kachow!
 
-        current_line = chapters.get("prologue")
-        if current_line is None:
-            exit(0)  # Graceful exit! Kachow!
+                jumped_prologue = True
+                continue
 
-        jumped_prologue = True
-        continue
+        case "jump":
+            match content[1]:
+                case "back":
+                    last_stack = stack.pop()
+                    if last_stack[1] == "epilogue":
+                        exit()
 
-    # Handle jumping
-    if content[0] == "jump":
-        if content[1] == "back":
-            last_stack = stack.pop()
-            if last_stack[1] == "epilogue":
-                exit()
+                    current_line = last_stack[0]
 
-            current_line = last_stack[0]
-            continue
+                case "last":
+                    current_line = chapters[stack[-1][1]]
+                
+                case "to":
+                    stack.append((current_line + 1, content[2]))
+                    current_line = chapters.get(content[2])
+                    if current_line is None:
+                        exit(
+                            "english: cannot jump into the backrooms."
+                            if content[2] != "epilogue" else 0
+                        )
 
-        elif content[1] == "last":
-            current_line = chapters[stack[-1][1]]
-            continue
-
-        elif content[1] != "to":
-            exit("english: are you high?")
-
-        # Handle jumping to new chapter
-        stack.append((current_line + 1, content[2]))
-        current_line = chapters.get(content[2])
-        if current_line is None:
-            exit(
-                "english: cannot jump into the backrooms."
-                if content[2] != "epilogue" else 0
-            )
-
-        continue
+                case _:
+                    exit("english: are you high?")
 
     # Handle variable assignment
     if "is" in content:
@@ -148,12 +141,11 @@ while current_line < len(lines):
 
         current[content[is_index - 1]] = parse_object(" ".join(content[is_index + 1:]))
 
-    # Handle builtin chapters
+    # Handle the rest of the built-ins
     if content[0] in builtin_chapters:
         builtin_chapters[content[0]](
             *[parse_object(c)
             for c in content[1:]]
         )
 
-    # Debug info! Wooo!!
     current_line += 1
