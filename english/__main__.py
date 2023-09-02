@@ -7,13 +7,11 @@ from pathlib import Path
 from typing import Any, List
 
 from . import __version__
+
+from .builtins import builtins
 from .simple_eval import SimpleEval
-from .builtins import (
-    builtins,
-    Raw, Spacer, Converted
-)
-from .if_parser import parse_if_data, run_if_comp
 from .exceptions import show_exception
+from .if_parser import parse_if_data, run_if_comp
 
 # Initialization
 sys.argv = sys.argv[1:]
@@ -62,6 +60,7 @@ class EnglishInterpreter(object):
         self.variables = {}
         self.has_jumped_prologue = False
         self.stack = []
+        self.chapters = chapters
         self.evaluator = SimpleEval()
 
     def parse_object(self, object: str) -> Any:
@@ -75,27 +74,6 @@ class EnglishInterpreter(object):
         except Exception:
             return None
 
-    # Chapter builtins
-    @builtins.builtin([Converted, Spacer("of"), Converted, Spacer("to"), Converted])
-    def builtin_set(self, key: str | int, object: dict | list, value: Any) -> None:
-        if isinstance(object, list):
-            if isinstance(key, str):
-                raise IndexError("arrays do not support object-like keys.")
-
-            # Ensure this list is padded enough for you to
-            # index with whatever key we were given
-            object += [None] * ((key or 1) - len(object))
-
-        object[key] = value
-
-    @builtins.builtin([Converted, Spacer("from"), Converted, Spacer("as"), Raw])
-    def builtin_get(self, key: str | int, object: dict | list, variable: str) -> None:
-        self.variables[variable] = object[key]
-
-    @builtins.builtin([])
-    def builtin_print(*args) -> None:
-        print(*args)
-
     def mainloop(self) -> None:
         last_if = None
         while self.current_line < len(lines):
@@ -106,8 +84,8 @@ class EnglishInterpreter(object):
             # Handle immediate built-ins
             def run_builtin(line_data: List[str]) -> None:
                 builtins.builtins[line_data[0]](
-                    *[(self.parse_object(c), c)
-                    for c in line_data[1:]]
+                    self,
+                    *[(self.parse_object(c), c) for c in line_data[1:]]
                 )
 
             if content[0] in builtins.builtins:
@@ -125,31 +103,6 @@ class EnglishInterpreter(object):
 
                         self.has_jumped_prologue = True
                         continue
-
-                case "jump":
-                    match content[1]:
-                        case "back":
-                            last_stack = self.stack.pop()
-                            if last_stack[1] == "epilogue":
-                                exit(0)
-
-                            self.current_line = last_stack[0]
-
-                        case "last":
-                            self.current_line = chapters[self.stack[-1][1]]
-                        
-                        case "to":
-                            self.stack.append((self.current_line + 1, content[2]))
-                            self.current_line = chapters.get(content[2])
-                            if self.current_line is None:
-                                if content[2] == "epilogue":
-                                    exit(0)
-
-                                raise ValueError(
-                                    "cannot jump to a non-existant chapter.")
-
-                        case _:
-                            raise ValueError("you're trying to jump *where*?")
 
                 case "if" | "otherwise":
                     if content[0] == "otherwise":
