@@ -28,6 +28,7 @@ class English(object):
     def __init__(self) -> None:
         self.line = 0
         self.line_pattern = re.compile(r"(?:\"(.*?)\"|(\S+))")
+        self.variables = {}
         self._default_datatypes = {
             "null": None, "true": True, "false": False
         }
@@ -52,9 +53,13 @@ class English(object):
         objects = self.line_pattern.findall(line)
         return [obj[0] or obj[1] for obj in objects]
 
-    def exec_line(self, line: List[Argument]) -> None:
+    def exec_line(self, line: List[str]) -> None:
         # print(f"Line: {self.line} | Content: {line}")
-        builtins[line[0].raw](self, *line[1:])
+        builtin = builtins.get(line[0])
+        if builtin is not None:
+            return builtin(self, *self.parse_line(line[1:]))
+
+        print(line)
 
     def parse_line(self, line: List[str]) -> List[Argument]:
         new_line = []
@@ -62,9 +67,9 @@ class English(object):
             if chunk[0] == "\"" and chunk[-1] == "\"":
                 new_line.append(Argument(chunk, chunk[1:][:-1]))
 
-            elif chunk[0] in "+-." or chunk[0].isdigit():
+            elif chunk[0] in "+-" or chunk[0].isdigit() or "." in chunk:
                 new_line.append(Argument(chunk,
-                    (float if chunk[0] == "." else int)(chunk)
+                    (float if "." in chunk else int)(chunk)
                 ))
 
             elif chunk in self._default_datatypes:
@@ -78,7 +83,7 @@ class English(object):
     def main_loop(self) -> None:
         while self.line < self.line_count:
             line_content = self.split_line(self.lines[self.line])
-            self.exec_line(self.parse_line(line_content))
+            self.exec_line(line_content)
             self.line += 1
 
 # Handle CLI
