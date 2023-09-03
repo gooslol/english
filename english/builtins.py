@@ -24,11 +24,17 @@ class Builtins(object):
     ) -> None:
         def internal(fn: FunctionType) -> Any:
             def callback_processor(this, *args) -> Any:
+                spacer_indexes = []
                 for spacer in spacer_args:
                     if args[spacer[0]].raw != spacer[1]:
                         raise ValueError("Invalid transition word inside line.")
-                    
-                return fn(this, *args)
+
+                    spacer_indexes.append(spacer[0])
+ 
+                return fn(
+                    this,
+                    *[a for i, a in enumerate(args) if i not in spacer_indexes]
+                )
 
             if not spacer_args:
                 callback_processor = fn  # noqa: F811
