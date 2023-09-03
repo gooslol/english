@@ -1,17 +1,15 @@
 # Copyright 2023 iiPython & DmmD GM
 
 # Modules
+import re
 import sys
-import shlex
+from typing import List
 from pathlib import Path
-from typing import Any, List
 
 from . import __version__
-
-from .builtins import builtins
-from .simple_eval import SimpleEval
-from .exceptions import show_exception
-from .if_parser import parse_if_data, run_if_comp
+from .builtins import (
+    builtins, Argument
+)
 
 # Initialization
 sys.argv = sys.argv[1:]
@@ -25,144 +23,66 @@ if not sys.argv:
     ~ 
     ~ See docs/ for more detailed information.""".splitlines()[1:]]))
 
-filepath = Path(sys.argv[0])
-if not filepath.is_file():
-    exit("english: the specified file does not exist.")
-
-# Load file
-with open(filepath, "r") as fh:
-    lines = fh.read().splitlines()
-
-# Handle parsing
-def cleanup_lines(source: List[str]) -> List[str]:
-    return [
-        line.lstrip()
-        for line in lines
-        if (not (line.startswith("btw") or line.startswith("by the way"))) \
-            and line.strip()
-    ]
-
-# Parse chapters
-lines, chapters = cleanup_lines(lines), {}
-for line_number, line in enumerate(lines):
-    data = line.split(" ")
-    if data[0] != "chapter":
-        continue
-
-    chapters[data[1]] = line_number + 1
-
-del line_number, line  # Get line number/line out of RAM
-
-# Mainloop init
-class EnglishInterpreter(object):
+# Main class
+class English(object):
     def __init__(self) -> None:
-        self.current_line = 0
-        self.variables = {}
-        self.has_jumped_prologue = False
-        self.stack = []
-        self.chapters = chapters
-        self.evaluator = SimpleEval()
+        self.line = 0
+        self.line_pattern = re.compile(r"(?:\"(.*?)\"|(\S+))")
+        self._default_datatypes = {
+            "null": None, "true": True, "false": False
+        }
 
-    def parse_object(self, object: str) -> Any:
-        chunks = object.split(" ")
-        if chunks[0] == "new":
-            return {"object": dict, "array": list}[chunks[1]]()
+    def load_file(self, path: str) -> None:
+        if not Path(path).is_file():
+            exit("english: specified file does not exist.")
 
-        try:
-            return self.evaluator.eval(object, names = self.variables)
+        with open(path, "r") as fh:
+            self.lines = [
+                ln for ln in fh.read().splitlines()
+                if (not (ln.startswith("btw") or ln.startswith("by the way"))) and \
+                    ln.strip()
+            ]
+            self.line_count = len(self.lines)
+            self.chapters = {
+                ln.split(" ")[1]: idx + 1
+                for idx, ln in enumerate(self.lines) if ln.startswith("chapter ")
+            }
 
-        except Exception:
-            return None
+    def split_line(self, line: str) -> List[str]:
+        objects = self.line_pattern.findall(line)
+        return [obj[0] or obj[1] for obj in objects]
 
-    def mainloop(self) -> None:
-        last_if = None
-        while self.current_line < len(lines):
-            content = shlex.split(lines[self.current_line], posix = False)
-            if content[0] not in ["if", "otherwise"]:
-                last_if = None  # Reset the last if statement's value
+    def exec_line(self, line: List[Argument]) -> None:
+        # print(f"Line: {self.line} | Content: {line}")
+        builtins[line[0].raw](self, *line[1:])
 
-            # Handle immediate built-ins
-            def run_builtin(line_data: List[str]) -> None:
-                builtins.builtins[line_data[0]](
-                    self,
-                    *[(self.parse_object(c), c) for c in line_data[1:]]
-                )
+    def parse_line(self, line: List[str]) -> List[Argument]:
+        new_line = []
+        for chunk in line:
+            if chunk[0] == "\"" and chunk[-1] == "\"":
+                new_line.append(Argument(chunk, chunk[1:][:-1]))
 
-            if content[0] in builtins.builtins:
-                run_builtin(content)
-                self.current_line += 1
-                continue
+            elif chunk[0] in "+-." or chunk[0].isdigit():
+                new_line.append(Argument(chunk,
+                    (float if chunk[0] == "." else int)(chunk)
+                ))
 
-            # Match more integrated chapters
-            match content[0]:
-                case "chapter":
-                    if not self.has_jumped_prologue:
-                        self.current_line = chapters.get("prologue")
-                        if self.current_line is None:
-                            exit(0)  # Graceful exit! Kachow!
+            elif chunk in self._default_datatypes:
+                new_line.append(Argument(chunk, self._default_datatypes[chunk]))
 
-                        self.has_jumped_prologue = True
-                        continue
+            else:
+                new_line.append(Argument(chunk, chunk))
 
-                case "if" | "otherwise":
-                    if content[0] == "otherwise":
-                        if last_if is None:
-                            raise ValueError(
-                                "otherwise must be used in conjunction with if.")
+        return new_line
 
-                        elif last_if is True:
-                            self.current_line += 1
-                            continue
-
-                        elif content[1] != "if":
-                            run_builtin(content[1:])
-                            self.current_line += 1
-                            continue
-
-                        # Remove the otherwise and treat it like a regular if statement
-                        content = content[1:]
-
-                    try:
-                        v1, v2, cond, expr = parse_if_data(content[1:])
-                        last_if = run_if_comp(
-                            self.parse_object(v1),
-                            self.parse_object(v2),
-                            cond
-                        )
-                        if last_if:
-                            run_builtin(shlex.split(expr, posix = False))
-
-                    except Exception as e:
-                        raise TypeError(
-                            "provided statement is unparsable."
-                            if isinstance(e, IndexError) else
-                            "statement is comparing uncomparable types."
-                        )
-
-                    self.current_line += 1
-                    continue
-
-            # Handle variable assignment
-            if "is" in content:
-                is_index, current = content.index("is"), self.variables
-                if is_index > 1:
-                    try:
-                        for key in content[:(is_index - 1)]:
-                            current = current[key.removesuffix("'s")]
-
-                    except KeyError:
-                        raise ValueError("provided item is missing ownership.")
-
-                current[content[is_index - 1]] = \
-                    self.parse_object(" ".join(content[is_index + 1:]))
-
-            self.current_line += 1
+    def main_loop(self) -> None:
+        while self.line < self.line_count:
+            line_content = self.split_line(self.lines[self.line])
+            self.exec_line(self.parse_line(line_content))
+            self.line += 1
 
 # Handle CLI
 if __name__ == "__main__":
-    interpreter = EnglishInterpreter()
-    try:
-        interpreter.mainloop()
-
-    except Exception as e:
-        show_exception(e.args[0], interpreter.current_line, filepath)
+    english = English()
+    english.load_file(sys.argv[0])
+    english.main_loop()
