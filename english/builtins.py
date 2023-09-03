@@ -43,6 +43,39 @@ class Builtins(object):
 
         return internal
 
+# Helper functions
+def perform_if_statement(self, content: List[str]) -> Tuple[bool, str]:
+    parsed, in_condition, payload = [], False, ""
+    for item in content:
+        if payload in [
+            "is equal to",
+            "is not equal to",
+            "is less than",
+            "is greater than"
+        ]:
+            in_condition = False
+            parsed.append(payload)
+            payload = ""
+
+        if item == "is":
+            parsed.append(payload)
+            payload = item
+            in_condition = True
+
+        elif item == "then":
+            parsed.append(payload)
+            payload = ""
+
+        else:
+            payload += (" " + item if (payload or in_condition) else item)
+
+    data = parsed + [payload]
+    value1, value2, cond = self.eval_expr(data[0]), self.eval_expr(data[2]), data[1]
+    return ((value1 == value2) and (cond == "is equal to")) or \
+            ((value1 != value2) and (cond == "is not equal to")) or \
+            ((value1 < value2) and (cond == "is less than")) or \
+            ((value1 > value2) and (cond == "is greater than")), data[3]
+
 # Pre-init
 builtins = Builtins()
 
@@ -76,6 +109,27 @@ def builtin_jump(self, jump_type: str, location: str = None) -> None:
 
     else:
         raise ValueError("you're trying to jump *where*?")
+
+@builtins.builtin("if")
+def builtin_if(self, *content) -> None:
+    resp, expr = perform_if_statement(self, [a.raw for a in content])
+    if resp:
+        self.exec_line(self.split_line(expr))
+
+    self.comp_stack.append(resp)
+
+@builtins.builtin("otherwise")
+def builtin_otherwise(self, *content) -> None:
+    if (self.lines[self.line - 1].split(" ")[0] not in ["if", "otherwise"]) or \
+        not self.comp_stack:
+        raise RuntimeError("otherwise must be used in conjunction with an if branch.")
+
+    elif content[0] != "if" and self.comp_stack[-1] is False:
+        self.exec_line([a.raw for a in content])
+
+    self.comp_stack.pop()
+    if content[1] == "if":
+        builtin_if(self, *content[1:])
 
 # Post-init
 builtins = builtins.builtins  # Fetch the mapping only

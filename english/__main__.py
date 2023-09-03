@@ -29,7 +29,7 @@ class English(object):
     def __init__(self) -> None:
         self.line = 0
         self.line_pattern = re.compile(r"(?:(\".*?\")|(\S+))")
-        self.stack, self.variables = [], {}
+        self.stack, self.comp_stack, self.variables = [], [], {}
 
         self._default_datatypes = {
             "null": None, "true": True, "false": False
@@ -83,7 +83,8 @@ class English(object):
             if chunk[0] == "\"" and chunk[-1] == "\"":
                 new_line.append(Argument(chunk, chunk[1:][:-1]))
 
-            elif chunk[0] in "+-" or chunk[0].isdigit() or "." in chunk:
+            elif (chunk[0] in "+-" or chunk[0].isdigit() or \
+                "." in chunk) and len(chunk) > 1 and " " not in chunk:
                 new_line.append(Argument(chunk,
                     (float if "." in chunk else int)(chunk)
                 ))
