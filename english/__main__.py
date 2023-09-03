@@ -29,7 +29,7 @@ class English(object):
     def __init__(self) -> None:
         self.line = 0
         self.line_pattern = re.compile(r"(?:(\".*?\")|(\S+))")
-        self.variables = {}
+        self.stack, self.variables = [], {}
 
         self._default_datatypes = {
             "null": None, "true": True, "false": False
@@ -46,6 +46,7 @@ class English(object):
                 if (not (ln.startswith("btw") or ln.startswith("by the way"))) and \
                     ln.strip()
             ]
+            self.ran_prologue = False
             self.line_count = len(self.lines)
             self.chapters = {
                 ln.split(" ")[1]: idx + 1
@@ -98,6 +99,14 @@ class English(object):
     def main_loop(self) -> None:
         while self.line < self.line_count:
             line_content = self.split_line(self.lines[self.line])
+            if line_content[0] == "chapter":
+                prologue_line = self.chapters.get("prologue")
+                if prologue_line is None:
+                    return exit(0)
+
+                self.line = prologue_line if not self.ran_prologue else self.line + 1
+                continue
+
             self.exec_line(line_content)
             self.line += 1
 

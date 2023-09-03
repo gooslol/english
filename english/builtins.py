@@ -51,5 +51,31 @@ builtins = Builtins()
 def builtin_print(self, *args) -> None:
     print(*[a.obj for a in args])
 
+@builtins.builtin("jump")
+def builtin_jump(self, jump_type: str, location: str = None) -> None:
+    if jump_type.raw == "back":
+        last_stack = self.stack.pop()
+        if last_stack[1] == "epilogue":
+            exit(0)
+
+        self.line = last_stack[0] - 1
+
+    elif jump_type.raw == "last":
+        self.line = self.chapters[self.stack[-1][1]] - 1
+
+    elif jump_type.raw == "to":
+        self.stack.append((self.line + 1, location.obj))
+        chapter_line = self.chapters.get(location.obj)
+        if chapter_line is None:
+            if location.obj == "epilogue":
+                exit(0)
+
+            raise ValueError("cannot jump to a non-existant chapter.")
+
+        self.line = chapter_line - 1
+
+    else:
+        raise ValueError("you're trying to jump *where*?")
+
 # Post-init
 builtins = builtins.builtins  # Fetch the mapping only
