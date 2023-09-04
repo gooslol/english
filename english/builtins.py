@@ -6,6 +6,8 @@ from typing import Any, List, Tuple
 
 from dataclasses import dataclass
 
+from .keypress import readchar
+
 # Dataclass
 @dataclass
 class Argument:
@@ -154,6 +156,15 @@ def builtin_cast(self, variable: str, new_type: str) -> None:
     self.variables[variable.raw] = {
         "string": str, "integer": int, "float": float, "boolean": bool
     }[new_type.raw](self.variables[variable.raw])
+
+@builtins.builtin("input", [(1, "as")])
+def builtin_input(self, prompt: str, variable: str) -> None:
+    self.variables[variable.raw] = input(prompt.obj)
+
+@builtins.builtin("fetch", [(0, "key"), (1, "as")])
+def builtin_fetch_key(self, variable: str) -> None:
+    key = readchar()
+    self.variables[variable.raw] = key if isinstance(key, str) else None
 
 # Post-init
 builtins = builtins.builtins  # Fetch the mapping only
