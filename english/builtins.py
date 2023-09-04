@@ -131,5 +131,17 @@ def builtin_otherwise(self, *content) -> None:
     if content[1] == "if":
         builtin_if(self, *content[1:])
 
+@builtins.builtin("get", [(1, "from"), (3, "as")])
+def builtin_get(self, key: str | int, object: dict | list, variable: str) -> None:
+    self.variables[variable.raw] = object.obj[key.obj]
+
+@builtins.builtin("set", [(1, "of"), (3, "to")])
+def builtin_set(self, key: str | int, object: str, value: Any) -> None:
+    key, obj = key.obj, self.variables[object.raw]
+    if isinstance(obj, list):
+        obj += [None] * (key - (len(obj) - 1))
+
+    obj[key] = value.obj
+
 # Post-init
 builtins = builtins.builtins  # Fetch the mapping only

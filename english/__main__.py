@@ -59,7 +59,10 @@ class English(object):
 
     def eval_expr(self, expr: str) -> Any:
         parsed_value = self.parse_line([expr])
-        if (len(parsed_value) > 1) or parsed_value[0].raw == parsed_value[0].obj:
+        if parsed_value[0].raw.startswith("new "):
+            return {"array": list, "object": dict}[parsed_value[0].raw.split(" ")[1]]()
+
+        elif (len(parsed_value) > 1) or parsed_value[0].raw == parsed_value[0].obj:
             return self._evaluator.eval(expr, names = self.variables)
 
         return parsed_value[0].obj
@@ -83,8 +86,8 @@ class English(object):
             if chunk[0] == "\"" and chunk[-1] == "\"":
                 new_line.append(Argument(chunk, chunk[1:][:-1]))
 
-            elif (chunk[0] in "+-" or chunk[0].isdigit() or \
-                "." in chunk) and len(chunk) > 1 and " " not in chunk:
+            elif ((chunk[0] in "+-" and len(chunk) > 1) or chunk[0].isdigit() or \
+                "." in chunk) and " " not in chunk:
                 new_line.append(Argument(chunk,
                     (float if "." in chunk else int)(chunk)
                 ))
