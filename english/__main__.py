@@ -42,9 +42,8 @@ class English(object):
 
         with open(path, "r") as fh:
             self.lines = [
-                ln for ln in fh.read().splitlines()
-                if (not (ln.startswith("btw") or ln.startswith("by the way"))) and \
-                    ln.strip()
+                ln.lstrip() for ln in fh.read().splitlines()
+                if not (ln.startswith(("btw", "by the way")) or not ln.strip())
             ]
             self.ran_prologue = False
             self.line_count = len(self.lines)
@@ -118,4 +117,32 @@ class English(object):
 if __name__ == "__main__":
     english = English()
     english.load_file(sys.argv[0])
-    english.main_loop()
+    try:
+        english.main_loop()
+
+    except Exception as e:
+        with open(Path(sys.argv[0]), "r") as fh:
+            line_contents = fh.read().splitlines()
+
+        # Calculate actual file line based on the virtual one
+        virt_line = 0
+        for line_number, line in enumerate(line_contents):
+            if line.startswith(("btw", "by the way")) or not line.strip():
+                continue
+
+            elif virt_line == english.line:
+                break
+
+            virt_line += 1
+
+        # Handle some terminal info
+        def escape(code: str) -> str:
+            return f"\x1b[{code}m"
+
+        red, reset = escape("38;5;196"), escape("0")
+        python_version = ".".join([str(c) for c in sys.version_info[:3]])
+        print(f"English v{__version__} running via {python_version}")
+        print(f"Problem occured while running file '{sys.argv[0]}':")
+        print(f"  {line_number + 1} >  {line}")
+        print(f"  {' ' * len(str(line_number + 1))}    {red}{'^' * len(line)}{reset}")
+        print(f"\nProblem: {e}")
