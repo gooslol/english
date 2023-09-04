@@ -71,10 +71,16 @@ def perform_if_statement(self, content: List[str]) -> Tuple[bool, str]:
 
     data = parsed + [payload]
     value1, value2, cond = self.eval_expr(data[0]), self.eval_expr(data[2]), data[1]
+    if type(value1) == type(value2):
+        comp_less_or_greater = ((value1 < value2) and (cond == "is less than")) or \
+            ((value1 > value2) and (cond == "is greater than"))
+
+    else:
+        comp_less_or_greater = False
+
     return ((value1 == value2) and (cond == "is equal to")) or \
             ((value1 != value2) and (cond == "is not equal to")) or \
-            ((value1 < value2) and (cond == "is less than")) or \
-            ((value1 > value2) and (cond == "is greater than")), data[3]
+            comp_less_or_greater, data[3]
 
 # Pre-init
 builtins = Builtins()
@@ -142,6 +148,12 @@ def builtin_set(self, key: str | int, object: str, value: Any) -> None:
         obj += [None] * (key - (len(obj) - 1))
 
     obj[key] = value.obj
+
+@builtins.builtin("cast", [(1, "to")])
+def builtin_cast(self, variable: str, new_type: str) -> None:
+    self.variables[variable.raw] = {
+        "string": str, "integer": int, "float": float, "boolean": bool
+    }[new_type.raw](self.variables[variable.raw])
 
 # Post-init
 builtins = builtins.builtins  # Fetch the mapping only
